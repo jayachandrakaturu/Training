@@ -1,0 +1,11 @@
+#red {
+    color: yellow;
+    background-color: black;
+    padding: 20px;
+}
+
+.gree {
+    color: blue;
+    background-color: red;
+    padding: 20px;
+}
