@@ -1,29 +1,24 @@
 import { Component } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { FormsModule, FormControl, ReactiveFormsModule } from '@angular/forms';
-import { ToUppercaseDirective } from './to-uppercase.directive';
 import { By } from '@angular/platform-browser';
+import { FilterInvalidCharactersDirective } from './filter-invalid-characters.directive';
 
 @Component({
   standalone: true,
-  imports: [FormsModule, ReactiveFormsModule, ToUppercaseDirective],
-  template: `
-    <input id="plain" [ngModel]="plainValue">
-    <input id="control" [formControl]="control">
-  `,
+  imports: [FilterInvalidCharactersDirective],
+  template: `<input [appFilterInvalidCharacters]="allowedChars">`,
 })
 class TestHostComponent {
-  plainValue = '';
-  control = new FormControl('');
+  allowedChars = /^[0-9]$/; // Only digits allowed
 }
 
-describe('ToUppercaseDirective', () => {
+describe('FilterInvalidCharactersDirective', () => {
   let fixture: ComponentFixture<TestHostComponent>;
   let host: TestHostComponent;
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [TestHostComponent], // only import standalone host
+      imports: [TestHostComponent], // Only import standalone host
     }).compileComponents();
 
     fixture = TestBed.createComponent(TestHostComponent);
@@ -31,61 +26,53 @@ describe('ToUppercaseDirective', () => {
     fixture.detectChanges();
   });
 
-  it('should convert input value to uppercase for plain input', () => {
-    const inputDebug = fixture.debugElement.query(By.css('#plain'));
+  it('should allow valid keydown input', () => {
+    const inputDebug = fixture.debugElement.query(By.css('input'));
     const inputEl = inputDebug.nativeElement as HTMLInputElement;
 
-    inputEl.value = 'hello';
-    inputEl.dispatchEvent(new Event('input'));
-    fixture.detectChanges();
+    const event = new KeyboardEvent('keydown', { key: '5', bubbles: true, cancelable: true });
+    const preventSpy = spyOn(event, 'preventDefault').and.callThrough();
 
-    expect(inputEl.value).toBe('HELLO');
+    inputEl.dispatchEvent(event);
+    expect(preventSpy).not.toHaveBeenCalled();
   });
 
-  it('should convert value to uppercase for formControl input', () => {
-    const inputDebug = fixture.debugElement.query(By.css('#control'));
+  it('should prevent invalid keydown input', () => {
+    const inputDebug = fixture.debugElement.query(By.css('input'));
     const inputEl = inputDebug.nativeElement as HTMLInputElement;
 
-    inputEl.value = 'world';
-    inputEl.dispatchEvent(new Event('input'));
-    fixture.detectChanges();
+    const event = new KeyboardEvent('keydown', { key: 'a', bubbles: true, cancelable: true });
+    const preventSpy = spyOn(event, 'preventDefault').and.callThrough();
 
-    expect(host.control.value).toBe('WORLD');
-    expect(inputEl.value).toBe('WORLD');
+    inputEl.dispatchEvent(event);
+    expect(preventSpy).toHaveBeenCalled();
   });
 
-  it('should preserve cursor position', () => {
-    const inputDebug = fixture.debugElement.query(By.css('#plain'));
+  it('should allow valid paste input', () => {
+    const inputDebug = fixture.debugElement.query(By.css('input'));
     const inputEl = inputDebug.nativeElement as HTMLInputElement;
 
-    inputEl.value = 'hello';
-    inputEl.setSelectionRange(2, 2); // cursor at index 2
-    inputEl.dispatchEvent(new Event('input'));
-    fixture.detectChanges();
+    const clipboardData = new DataTransfer();
+    clipboardData.setData('text', '7');
 
-    expect(inputEl.selectionStart).toBe(2);
-    expect(inputEl.selectionEnd).toBe(2);
+    const pasteEvent = new ClipboardEvent('paste', { clipboardData, bubbles: true, cancelable: true });
+    const preventSpy = spyOn(pasteEvent, 'preventDefault').and.callThrough();
+
+    inputEl.dispatchEvent(pasteEvent);
+    expect(preventSpy).not.toHaveBeenCalled();
   });
 
-  it('should not throw if NgControl is missing', () => {
-    const inputDebug = fixture.debugElement.query(By.css('#plain'));
+  it('should prevent invalid paste input', () => {
+    const inputDebug = fixture.debugElement.query(By.css('input'));
     const inputEl = inputDebug.nativeElement as HTMLInputElement;
 
-    expect(() => {
-      inputEl.value = 'test';
-      inputEl.dispatchEvent(new Event('input'));
-      fixture.detectChanges();
-    }).not.toThrow();
-  });
+    const clipboardData = new DataTransfer();
+    clipboardData.setData('text', 'abc');
 
-  it('should handle empty input gracefully', () => {
-    const inputDebug = fixture.debugElement.query(By.css('#plain'));
-    const inputEl = inputDebug.nativeElement as HTMLInputElement;
+    const pasteEvent = new ClipboardEvent('paste', { clipboardData, bubbles: true, cancelable: true });
+    const preventSpy = spyOn(pasteEvent, 'preventDefault').and.callThrough();
 
-    inputEl.value = '';
-    inputEl.dispatchEvent(new Event('input'));
-    fixture.detectChanges();
-
-    expect(inputEl.value).toBe('');
+    inputEl.dispatchEvent(pasteEvent);
+    expect(preventSpy).toHaveBeenCalled();
   });
 });
