@@ -1,26 +1,29 @@
 import { Component } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { FormsModule, NgControl, ReactiveFormsModule, FormControl, FormGroup, FormGroupDirective } from '@angular/forms';
-import { PadWithZeroDirective } from './pad-with-zero.directive';
+import { FormsModule, FormControl, ReactiveFormsModule } from '@angular/forms';
+import { ToUppercaseDirective } from './to-uppercase.directive';
 import { By } from '@angular/platform-browser';
 
 @Component({
   standalone: true,
-  imports: [FormsModule, ReactiveFormsModule, PadWithZeroDirective],
-  template: `<input [formControl]="control" [appPadWithZero]="padLength">`,
+  imports: [FormsModule, ReactiveFormsModule, ToUppercaseDirective],
+  template: `
+    <input id="plain" [ngModel]="plainValue">
+    <input id="control" [formControl]="control">
+  `,
 })
 class TestHostComponent {
+  plainValue = '';
   control = new FormControl('');
-  padLength?: number;
 }
 
-describe('PadWithZeroDirective', () => {
+describe('ToUppercaseDirective', () => {
   let fixture: ComponentFixture<TestHostComponent>;
   let host: TestHostComponent;
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [TestHostComponent],
+      imports: [TestHostComponent], // only import standalone host
     }).compileComponents();
 
     fixture = TestBed.createComponent(TestHostComponent);
@@ -28,69 +31,61 @@ describe('PadWithZeroDirective', () => {
     fixture.detectChanges();
   });
 
-  it('should pad value with zeros on blur', () => {
-    const inputDebug = fixture.debugElement.query(By.directive(PadWithZeroDirective));
+  it('should convert input value to uppercase for plain input', () => {
+    const inputDebug = fixture.debugElement.query(By.css('#plain'));
     const inputEl = inputDebug.nativeElement as HTMLInputElement;
 
-    host.control.setValue('7');
-    inputEl.dispatchEvent(new Event('blur'));
+    inputEl.value = 'hello';
+    inputEl.dispatchEvent(new Event('input'));
     fixture.detectChanges();
 
-    expect(host.control.value).toBe('007'); // default pad length 3
+    expect(inputEl.value).toBe('HELLO');
   });
 
-  it('should use custom padLength input', () => {
-    const inputDebug = fixture.debugElement.query(By.directive(PadWithZeroDirective));
+  it('should convert value to uppercase for formControl input', () => {
+    const inputDebug = fixture.debugElement.query(By.css('#control'));
     const inputEl = inputDebug.nativeElement as HTMLInputElement;
 
-    host.padLength = 5;
+    inputEl.value = 'world';
+    inputEl.dispatchEvent(new Event('input'));
     fixture.detectChanges();
 
-    host.control.setValue('12');
-    inputEl.dispatchEvent(new Event('blur'));
-    fixture.detectChanges();
-
-    expect(host.control.value).toBe('00012'); // padded to 5
+    expect(host.control.value).toBe('WORLD');
+    expect(inputEl.value).toBe('WORLD');
   });
 
-  it('should not pad when value is empty', () => {
-    const inputDebug = fixture.debugElement.query(By.directive(PadWithZeroDirective));
+  it('should preserve cursor position', () => {
+    const inputDebug = fixture.debugElement.query(By.css('#plain'));
     const inputEl = inputDebug.nativeElement as HTMLInputElement;
 
-    host.control.setValue('');
-    inputEl.dispatchEvent(new Event('blur'));
+    inputEl.value = 'hello';
+    inputEl.setSelectionRange(2, 2); // cursor at index 2
+    inputEl.dispatchEvent(new Event('input'));
     fixture.detectChanges();
 
-    expect(host.control.value).toBe(''); // empty remains empty
+    expect(inputEl.selectionStart).toBe(2);
+    expect(inputEl.selectionEnd).toBe(2);
   });
 
-  it('should not change value if already padded', () => {
-    const inputDebug = fixture.debugElement.query(By.directive(PadWithZeroDirective));
+  it('should not throw if NgControl is missing', () => {
+    const inputDebug = fixture.debugElement.query(By.css('#plain'));
     const inputEl = inputDebug.nativeElement as HTMLInputElement;
 
-    host.control.setValue('007');
-    inputEl.dispatchEvent(new Event('blur'));
-    fixture.detectChanges();
-
-    expect(host.control.value).toBe('007'); // unchanged
+    expect(() => {
+      inputEl.value = 'test';
+      inputEl.dispatchEvent(new Event('input'));
+      fixture.detectChanges();
+    }).not.toThrow();
   });
 
-  it('should handle non-numeric input gracefully', () => {
-    const inputDebug = fixture.debugElement.query(By.directive(PadWithZeroDirective));
+  it('should handle empty input gracefully', () => {
+    const inputDebug = fixture.debugElement.query(By.css('#plain'));
     const inputEl = inputDebug.nativeElement as HTMLInputElement;
 
-    host.control.setValue('abc');
-    inputEl.dispatchEvent(new Event('blur'));
+    inputEl.value = '';
+    inputEl.dispatchEvent(new Event('input'));
     fixture.detectChanges();
 
-    expect(host.control.value).toBe('abc'); // unchanged
-  });
-
-  it('should default padLength to 3 if NaN is provided', () => {
-    const inputDebug = fixture.debugElement.query(By.directive(PadWithZeroDirective));
-    const directive = inputDebug.injector.get(PadWithZeroDirective);
-
-    directive.padLength = NaN;
-    expect(directive.padLength).toBe(3);
+    expect(inputEl.value).toBe('');
   });
 });
