@@ -1,67 +1,96 @@
 import { Component } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { HasAccessDirective } from './has-access.directive';
-import { UserSessionService } from '../../services/user-session.service';
+import { FormsModule, NgControl, ReactiveFormsModule, FormControl, FormGroup, FormGroupDirective } from '@angular/forms';
+import { PadWithZeroDirective } from './pad-with-zero.directive';
+import { By } from '@angular/platform-browser';
 
 @Component({
   standalone: true,
-  imports: [HasAccessDirective],
-  template: `<ng-template [appHasAccess]="accessList">Access Granted</ng-template>`,
+  imports: [FormsModule, ReactiveFormsModule, PadWithZeroDirective],
+  template: `<input [formControl]="control" [appPadWithZero]="padLength">`,
 })
 class TestHostComponent {
-  accessList: string[] = [];
+  control = new FormControl('');
+  padLength?: number;
 }
 
-describe('HasAccessDirective', () => {
+describe('PadWithZeroDirective', () => {
   let fixture: ComponentFixture<TestHostComponent>;
   let host: TestHostComponent;
-  let mockUserSession: jasmine.SpyObj<UserSessionService>;
 
   beforeEach(async () => {
-    mockUserSession = jasmine.createSpyObj('UserSessionService', ['getAllRoles', 'getUserGroups']);
-
     await TestBed.configureTestingModule({
-      imports: [TestHostComponent], // ✅ Only import the host
-      providers: [{ provide: UserSessionService, useValue: mockUserSession }],
+      imports: [TestHostComponent],
     }).compileComponents();
 
     fixture = TestBed.createComponent(TestHostComponent);
     host = fixture.componentInstance;
+    fixture.detectChanges();
   });
 
-  it('renders when user has matching role', () => {
-    mockUserSession.getAllRoles.and.returnValue(['ADMIN']);
-    mockUserSession.getUserGroups.and.returnValue([]);
-    host.accessList = ['ADMIN'];
+  it('should pad value with zeros on blur', () => {
+    const inputDebug = fixture.debugElement.query(By.directive(PadWithZeroDirective));
+    const inputEl = inputDebug.nativeElement as HTMLInputElement;
+
+    host.control.setValue('7');
+    inputEl.dispatchEvent(new Event('blur'));
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.textContent.trim()).toBe('Access Granted');
+    expect(host.control.value).toBe('007'); // default pad length 3
   });
 
-  it('renders when user has matching group', () => {
-    mockUserSession.getAllRoles.and.returnValue([]);
-    mockUserSession.getUserGroups.and.returnValue([{ groupCd: 'OPS' }]);
-    host.accessList = ['OPS'];
+  it('should use custom padLength input', () => {
+    const inputDebug = fixture.debugElement.query(By.directive(PadWithZeroDirective));
+    const inputEl = inputDebug.nativeElement as HTMLInputElement;
+
+    host.padLength = 5;
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.textContent.trim()).toBe('Access Granted');
+    host.control.setValue('12');
+    inputEl.dispatchEvent(new Event('blur'));
+    fixture.detectChanges();
+
+    expect(host.control.value).toBe('00012'); // padded to 5
   });
 
-  it('does not render when no match', () => {
-    mockUserSession.getAllRoles.and.returnValue(['VIEWER']);
-    mockUserSession.getUserGroups.and.returnValue([{ groupCd: 'GUEST' }]);
-    host.accessList = ['ADMIN'];
+  it('should not pad when value is empty', () => {
+    const inputDebug = fixture.debugElement.query(By.directive(PadWithZeroDirective));
+    const inputEl = inputDebug.nativeElement as HTMLInputElement;
+
+    host.control.setValue('');
+    inputEl.dispatchEvent(new Event('blur'));
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.textContent.trim()).toBe('');
+    expect(host.control.value).toBe(''); // empty remains empty
   });
 
-  it('handles undefined roles/groups', () => {
-    mockUserSession.getAllRoles.and.returnValue(undefined as any);
-    mockUserSession.getUserGroups.and.returnValue(undefined as any);
-    host.accessList = ['ADMIN'];
+  it('should not change value if already padded', () => {
+    const inputDebug = fixture.debugElement.query(By.directive(PadWithZeroDirective));
+    const inputEl = inputDebug.nativeElement as HTMLInputElement;
+
+    host.control.setValue('007');
+    inputEl.dispatchEvent(new Event('blur'));
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.textContent.trim()).toBe('');
+    expect(host.control.value).toBe('007'); // unchanged
+  });
+
+  it('should handle non-numeric input gracefully', () => {
+    const inputDebug = fixture.debugElement.query(By.directive(PadWithZeroDirective));
+    const inputEl = inputDebug.nativeElement as HTMLInputElement;
+
+    host.control.setValue('abc');
+    inputEl.dispatchEvent(new Event('blur'));
+    fixture.detectChanges();
+
+    expect(host.control.value).toBe('abc'); // unchanged
+  });
+
+  it('should default padLength to 3 if NaN is provided', () => {
+    const inputDebug = fixture.debugElement.query(By.directive(PadWithZeroDirective));
+    const directive = inputDebug.injector.get(PadWithZeroDirective);
+
+    directive.padLength = NaN;
+    expect(directive.padLength).toBe(3);
   });
 });
