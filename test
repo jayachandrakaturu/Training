@@ -1,181 +1,67 @@
-import { HasAccessDirective } from './has-access.directive';
-import { Component, DebugElement } from '@angular/core';
+import { Component } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { By } from '@angular/platform-browser';
-import { UserSessionService } from '../../services/user-session.service'; // Adjust path if necessary
+import { HasAccessDirective } from './has-access.directive';
+import { UserSessionService } from '../../services/user-session.service';
 
-// Mock Component to test the directive on
 @Component({
-  template: `
-    <div *appHasAccess="['ADMIN', 'GUEST']" data-testid="admin-guest-content">Admin/Guest Content</div>
-    <div *appHasAccess="['SUPERUSER']" data-testid="superuser-content">Superuser Content</div>
-    <div *appHasAccess="['FINANCE']" data-testid="finance-content">Finance Content</div>
-    <div *appHasAccess="['NO_MATCH']" data-testid="no-match-content">No Match Content</div>
-  `,
   standalone: true,
   imports: [HasAccessDirective],
+  template: `<ng-template [appHasAccess]="accessList">Access Granted</ng-template>`,
 })
-class TestHostComponent {}
+class TestHostComponent {
+  accessList: string[] = [];
+}
 
 describe('HasAccessDirective', () => {
   let fixture: ComponentFixture<TestHostComponent>;
-  let userSessionService: jasmine.SpyObj<UserSessionService>;
-  let mockUserGroups: { groupCd: string }[] = [];
-  let mockUserRoles: string[] = [];
-
-  // Setup the UserSessionService mock
-  const userSessionServiceSpy = jasmine.createSpyObj('UserSessionService', ['getAllRoles', 'getUserGroups']);
+  let host: TestHostComponent;
+  let mockUserSession: jasmine.SpyObj<UserSessionService>;
 
   beforeEach(async () => {
-    // Reset mock values before each test
-    userSessionServiceSpy.getAllRoles.and.returnValue(mockUserRoles);
-    userSessionServiceSpy.getUserGroups.and.returnValue(mockUserGroups as any);
+    mockUserSession = jasmine.createSpyObj('UserSessionService', ['getAllRoles', 'getUserGroups']);
 
     await TestBed.configureTestingModule({
-      imports: [HasAccessDirective, TestHostComponent],
-      providers: [
-        { provide: UserSessionService, useValue: userSessionServiceSpy }
-      ]
+      imports: [TestHostComponent], // ✅ Only import the host
+      providers: [{ provide: UserSessionService, useValue: mockUserSession }],
     }).compileComponents();
 
     fixture = TestBed.createComponent(TestHostComponent);
-    userSessionService = TestBed.inject(UserSessionService) as jasmine.SpyObj<UserSessionService>;
-    fixture.detectChanges(); // Initial change detection
+    host = fixture.componentInstance;
   });
 
-  const getElementByTestId = (testId: string): DebugElement | null => {
-    return fixture.debugElement.query(By.css(`[data-testid="${testId}"]`));
-  };
+  it('renders when user has matching role', () => {
+    mockUserSession.getAllRoles.and.returnValue(['ADMIN']);
+    mockUserSession.getUserGroups.and.returnValue([]);
+    host.accessList = ['ADMIN'];
+    fixture.detectChanges();
 
-  // --------------------------------------------------------------------------------------------------
-  // TEST CASES FOR ROLE-BASED ACCESS
-  // --------------------------------------------------------------------------------------------------
-
-  describe('when user has matching role', () => {
-    beforeEach(() => {
-      // Setup roles for these tests
-      mockUserRoles = ['ADMIN', 'USER'];
-      mockUserGroups = [{ groupCd: 'DEV' }];
-      userSessionService.getAllRoles.and.returnValue(mockUserRoles);
-      userSessionService.getUserGroups.and.returnValue(mockUserGroups as any);
-      fixture.detectChanges(); // Re-trigger ngOnInit (via template change)
-    });
-
-    it('should display the element if user role matches one of the required roles', () => {
-      // The user has 'ADMIN', required roles are ['ADMIN', 'GUEST']
-      const content = getElementByTestId('admin-guest-content');
-      expect(content).not.toBeNull();
-      expect(content?.nativeElement.textContent).toContain('Admin/Guest Content');
-    });
-
-    it('should not display the element if user role does not match any required roles', () => {
-      // The user has 'ADMIN', 'USER', required roles are ['SUPERUSER']
-      const content = getElementByTestId('superuser-content');
-      expect(content).toBeNull();
-    });
+    expect(fixture.nativeElement.textContent.trim()).toBe('Access Granted');
   });
 
-  // --------------------------------------------------------------------------------------------------
-  // TEST CASES FOR GROUP-BASED ACCESS
-  // --------------------------------------------------------------------------------------------------
+  it('renders when user has matching group', () => {
+    mockUserSession.getAllRoles.and.returnValue([]);
+    mockUserSession.getUserGroups.and.returnValue([{ groupCd: 'OPS' }]);
+    host.accessList = ['OPS'];
+    fixture.detectChanges();
 
-  describe('when user has matching group but no roles', () => {
-    beforeEach(() => {
-      // Setup groups for these tests and ensure roles is empty or null to hit the groups check
-      mockUserRoles = [];
-      mockUserGroups = [{ groupCd: 'FINANCE' }, { groupCd: 'OPS' }];
-      userSessionService.getAllRoles.and.returnValue(mockUserRoles);
-      userSessionService.getUserGroups.and.returnValue(mockUserGroups as any);
-      fixture.detectChanges();
-    });
-
-    it('should display the element if user group matches one of the required groups', () => {
-      // The user has group 'FINANCE', required roles/groups are ['FINANCE']
-      const content = getElementByTestId('finance-content');
-      expect(content).not.toBeNull();
-      expect(content?.nativeElement.textContent).toContain('Finance Content');
-    });
-
-    it('should not display the element if user group does not match any required groups', () => {
-      // The user has group 'FINANCE', 'OPS', required roles/groups are ['SUPERUSER']
-      const content = getElementByTestId('superuser-content');
-      expect(content).toBeNull();
-    });
+    expect(fixture.nativeElement.textContent.trim()).toBe('Access Granted');
   });
 
-  // --------------------------------------------------------------------------------------------------
-  // TEST CASES FOR NO ACCESS/EDGE CASES (100% coverage focus)
-  // --------------------------------------------------------------------------------------------------
+  it('does not render when no match', () => {
+    mockUserSession.getAllRoles.and.returnValue(['VIEWER']);
+    mockUserSession.getUserGroups.and.returnValue([{ groupCd: 'GUEST' }]);
+    host.accessList = ['ADMIN'];
+    fixture.detectChanges();
 
-  describe('when user has no roles or groups matching', () => {
-    beforeEach(() => {
-      // Setup to ensure both checks fail
-      mockUserRoles = ['USER'];
-      mockUserGroups = [{ groupCd: 'DEV' }];
-      userSessionService.getAllRoles.and.returnValue(mockUserRoles);
-      userSessionService.getUserGroups.and.returnValue(mockUserGroups as any);
-      fixture.detectChanges();
-    });
-
-    it('should not display the element when neither role nor group matches', () => {
-      // Required roles/groups are ['NO_MATCH']
-      const content = getElementByTestId('no-match-content');
-      expect(content).toBeNull();
-    });
+    expect(fixture.nativeElement.textContent.trim()).toBe('');
   });
 
-  describe('when user has null/undefined roles and groups (Edge Case)', () => {
-    beforeEach(() => {
-      // Test the `?.some` logic for null/undefined results
-      userSessionService.getAllRoles.and.returnValue(undefined);
-      userSessionService.getUserGroups.and.returnValue(null as any);
-      fixture.detectChanges();
-    });
+  it('handles undefined roles/groups', () => {
+    mockUserSession.getAllRoles.and.returnValue(undefined as any);
+    mockUserSession.getUserGroups.and.returnValue(undefined as any);
+    host.accessList = ['ADMIN'];
+    fixture.detectChanges();
 
-    it('should not display the element if both getAllRoles and getUserGroups return falsy values', () => {
-      // Required roles/groups are ['ADMIN', 'GUEST']
-      const content = getElementByTestId('admin-guest-content');
-      expect(content).toBeNull();
-    });
-  });
-
-  // --------------------------------------------------------------------------------------------------
-  // ADDITIONAL COVERAGE - CHECKING IF ROLE CHECK SHORT-CIRCUITS
-  // --------------------------------------------------------------------------------------------------
-
-  describe('when role check succeeds', () => {
-    beforeEach(() => {
-      // Role match is present, group call *should* still happen because of the OR (`||`) operator,
-      // but the result should be based on the successful role check.
-      mockUserRoles = ['ADMIN'];
-      mockUserGroups = [{ groupCd: 'FINANCE' }]; // Set a group that matches a different test case
-      userSessionService.getAllRoles.and.returnValue(mockUserRoles);
-      userSessionService.getUserGroups.and.returnValue(mockUserGroups as any); // Group call will be made
-      fixture.detectChanges();
-    });
-
-    it('should grant access based on a successful role match', () => {
-      // User has 'ADMIN', required is ['ADMIN', 'GUEST']
-      const content = getElementByTestId('admin-guest-content');
-      expect(content).not.toBeNull();
-    });
-
-    // Check for the line `this.userSession.getUserGroups()?.some(...)` coverage:
-    it('should call getUserGroups even if getAllRoles succeeds (due to code structure)', () => {
-        // The original code uses: `A?.some(...) || B?.some(...)`
-        // In Typescript/JavaScript, the `||` operator short-circuits *if the first operand is truthy*.
-        // The first operand is the result of `some()`, which is a boolean.
-        // If the role check is TRUE, the rest of the expression is skipped.
-        // If the role check is FALSE, the group check is executed.
-
-        // Test the TRUE case (Role match)
-        fixture.debugElement.query(By.css(`[data-testid="admin-guest-content"]`)); // Forces update
-        fixture.detectChanges();
-        
-        // **KEY COVERAGE CHECK:** The group check is *only* called if the role check is FALSE.
-        // To achieve 100% coverage, we need a test where the group check *is* executed.
-        // The next test case (where roles don't match but groups do) ensures the group check is executed.
-        expect(userSessionService.getUserGroups).toHaveBeenCalled(); // This may pass if the group check ran for a different element on initial render.
-    });
+    expect(fixture.nativeElement.textContent.trim()).toBe('');
   });
 });
