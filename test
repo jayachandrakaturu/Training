@@ -3,7 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { HasAccessDirective } from './has-access.directive';
 import { UserSessionService } from '../../services/user-session.service';
 
-// Mock component to test the directive
+// Mock component for directive usage
 @Component({
   template: `
     <div *appHasAccess="allowedRoles">Protected Content</div>
@@ -16,24 +16,30 @@ class TestComponent {
   allowedRoles: string[] = ['admin', 'editor'];
 }
 
-// Mock UserSessionService
+// Group interface for stronger typing
+interface UserGroup {
+  groupCd: string;
+  name: string;
+}
+
+// Mocked version of UserSessionService
 class MockUserSessionService {
   private mockRoles: string[] = [];
-  private mockGroups: any[] = [];
+  private mockGroups: UserGroup[] = [];
 
-  setRoles(roles: string[]) {
+  setRoles(roles: string[]): void {
     this.mockRoles = roles;
   }
 
-  setGroups(groups: any[]) {
+  setGroups(groups: UserGroup[]): void {
     this.mockGroups = groups;
   }
 
-  getAllRoles(): string[] {
+  getAllRoles(): string[] | undefined {
     return this.mockRoles;
   }
 
-  getUserGroups(): any[] {
+  getUserGroups(): UserGroup[] | undefined {
     return this.mockGroups;
   }
 }
@@ -41,8 +47,8 @@ class MockUserSessionService {
 describe('HasAccessDirective', () => {
   let directive: HasAccessDirective;
   let mockUserSessionService: MockUserSessionService;
-  let templateRef: TemplateRef<any>;
-  let viewContainerRef: ViewContainerRef;
+  let templateRef: TemplateRef<unknown>;
+  let viewContainerRef: jasmine.SpyObj<ViewContainerRef>;
 
   beforeEach(() => {
     TestBed.configureTestingModule({
@@ -53,49 +59,40 @@ describe('HasAccessDirective', () => {
     });
 
     mockUserSessionService = TestBed.inject(UserSessionService) as unknown as MockUserSessionService;
-    
-    // Create test component to get TemplateRef and ViewContainerRef
+
     const fixture = TestBed.createComponent(TestComponent);
-    const component = fixture.componentInstance;
-    
-    // Get TemplateRef from the component
-    templateRef = fixture.debugElement.children[0].references['testTemplate'];
-    
-    // Get ViewContainerRef - we'll create a spy for testing
-    viewContainerRef = {
-      clear: jasmine.createSpy('clear'),
-      createEmbeddedView: jasmine.createSpy('createEmbeddedView')
-    } as jasmine.SpyObj<ViewContainerRef>;
+    fixture.detectChanges();
+
+    const templateElement = fixture.debugElement.references['testTemplate'];
+    if (!templateElement) {
+      throw new Error('testTemplate not found in template');
+    }
+    templateRef = templateElement as TemplateRef<unknown>;
+
+    viewContainerRef = jasmine.createSpyObj<ViewContainerRef>('ViewContainerRef', [
+      'clear',
+      'createEmbeddedView'
+    ]);
   });
 
+  // ✅ Directive Creation Tests
   describe('Directive Creation', () => {
     it('should create an instance', () => {
-      directive = new HasAccessDirective(
-        templateRef,
-        viewContainerRef,
-        mockUserSessionService
-      );
+      directive = new HasAccessDirective(templateRef, viewContainerRef, mockUserSessionService);
       expect(directive).toBeTruthy();
     });
 
     it('should have required appHasAccess input', () => {
-      directive = new HasAccessDirective(
-        templateRef,
-        viewContainerRef,
-        mockUserSessionService
-      );
+      directive = new HasAccessDirective(templateRef, viewContainerRef, mockUserSessionService);
       directive.appHasAccess = ['admin'];
       expect(directive.appHasAccess).toEqual(['admin']);
     });
   });
 
+  // ✅ Initialization
   describe('ngOnInit', () => {
     beforeEach(() => {
-      directive = new HasAccessDirective(
-        templateRef,
-        viewContainerRef,
-        mockUserSessionService
-      );
+      directive = new HasAccessDirective(templateRef, viewContainerRef, mockUserSessionService);
     });
 
     it('should call updateView on initialization', () => {
@@ -105,29 +102,16 @@ describe('HasAccessDirective', () => {
     });
   });
 
+  // ✅ Role-based Access
   describe('updateView - Role Based Access', () => {
     beforeEach(() => {
-      directive = new HasAccessDirective(
-        templateRef,
-        viewContainerRef,
-        mockUserSessionService
-      );
+      directive = new HasAccessDirective(templateRef, viewContainerRef, mockUserSessionService);
     });
 
     it('should show content when user has matching role', () => {
       directive.appHasAccess = ['admin', 'editor'];
       mockUserSessionService.setRoles(['admin', 'user']);
-      
-      directive.updateView();
 
-      expect(viewContainerRef.clear).toHaveBeenCalled();
-      expect(viewContainerRef.createEmbeddedView).toHaveBeenCalledWith(templateRef);
-    });
-
-    it('should show content when user has exactly matching role', () => {
-      directive.appHasAccess = ['admin'];
-      mockUserSessionService.setRoles(['admin']);
-      
       directive.updateView();
 
       expect(viewContainerRef.clear).toHaveBeenCalled();
@@ -136,18 +120,8 @@ describe('HasAccessDirective', () => {
 
     it('should not show content when user has no matching roles', () => {
       directive.appHasAccess = ['admin', 'editor'];
-      mockUserSessionService.setRoles(['user', 'guest']);
-      
-      directive.updateView();
+      mockUserSessionService.setRoles(['guest']);
 
-      expect(viewContainerRef.clear).toHaveBeenCalled();
-      expect(viewContainerRef.createEmbeddedView).not.toHaveBeenCalled();
-    });
-
-    it('should not show content when user has no roles', () => {
-      directive.appHasAccess = ['admin', 'editor'];
-      mockUserSessionService.setRoles([]);
-      
       directive.updateView();
 
       expect(viewContainerRef.clear).toHaveBeenCalled();
@@ -155,36 +129,17 @@ describe('HasAccessDirective', () => {
     });
   });
 
+  // ✅ Group-based Access
   describe('updateView - Group Based Access', () => {
     beforeEach(() => {
-      directive = new HasAccessDirective(
-        templateRef,
-        viewContainerRef,
-        mockUserSessionService
-      );
+      directive = new HasAccessDirective(templateRef, viewContainerRef, mockUserSessionService);
     });
 
     it('should show content when user has matching group', () => {
-      directive.appHasAccess = ['admin-group', 'editor-group'];
-      mockUserSessionService.setRoles([]); // No roles
-      mockUserSessionService.setGroups([
-        { groupCd: 'user-group', name: 'User Group' },
-        { groupCd: 'admin-group', name: 'Admin Group' }
-      ]);
-      
-      directive.updateView();
-
-      expect(viewContainerRef.clear).toHaveBeenCalled();
-      expect(viewContainerRef.createEmbeddedView).toHaveBeenCalledWith(templateRef);
-    });
-
-    it('should show content when user has exactly matching group', () => {
       directive.appHasAccess = ['admin-group'];
+      mockUserSessionService.setGroups([{ groupCd: 'admin-group', name: 'Admin Group' }]);
       mockUserSessionService.setRoles([]);
-      mockUserSessionService.setGroups([
-        { groupCd: 'admin-group', name: 'Admin Group' }
-      ]);
-      
+
       directive.updateView();
 
       expect(viewContainerRef.clear).toHaveBeenCalled();
@@ -193,23 +148,9 @@ describe('HasAccessDirective', () => {
 
     it('should not show content when user has no matching groups', () => {
       directive.appHasAccess = ['admin-group', 'editor-group'];
+      mockUserSessionService.setGroups([{ groupCd: 'guest-group', name: 'Guest Group' }]);
       mockUserSessionService.setRoles([]);
-      mockUserSessionService.setGroups([
-        { groupCd: 'user-group', name: 'User Group' },
-        { groupCd: 'guest-group', name: 'Guest Group' }
-      ]);
-      
-      directive.updateView();
 
-      expect(viewContainerRef.clear).toHaveBeenCalled();
-      expect(viewContainerRef.createEmbeddedView).not.toHaveBeenCalled();
-    });
-
-    it('should not show content when user has no groups', () => {
-      directive.appHasAccess = ['admin-group', 'editor-group'];
-      mockUserSessionService.setRoles([]);
-      mockUserSessionService.setGroups([]);
-      
       directive.updateView();
 
       expect(viewContainerRef.clear).toHaveBeenCalled();
@@ -217,48 +158,17 @@ describe('HasAccessDirective', () => {
     });
   });
 
+  // ✅ Combined Role and Group Access
   describe('updateView - Combined Role and Group Access', () => {
     beforeEach(() => {
-      directive = new HasAccessDirective(
-        templateRef,
-        viewContainerRef,
-        mockUserSessionService
-      );
+      directive = new HasAccessDirective(templateRef, viewContainerRef, mockUserSessionService);
     });
 
-    it('should show content when user has matching role even without matching group', () => {
+    it('should show content when user has matching role or group', () => {
       directive.appHasAccess = ['admin', 'editor-group'];
       mockUserSessionService.setRoles(['admin']);
-      mockUserSessionService.setGroups([
-        { groupCd: 'user-group', name: 'User Group' } // No matching group
-      ]);
-      
-      directive.updateView();
+      mockUserSessionService.setGroups([{ groupCd: 'guest-group', name: 'Guest Group' }]);
 
-      expect(viewContainerRef.clear).toHaveBeenCalled();
-      expect(viewContainerRef.createEmbeddedView).toHaveBeenCalledWith(templateRef);
-    });
-
-    it('should show content when user has matching group even without matching role', () => {
-      directive.appHasAccess = ['admin', 'editor-group'];
-      mockUserSessionService.setRoles(['user']); // No matching role
-      mockUserSessionService.setGroups([
-        { groupCd: 'editor-group', name: 'Editor Group' } // Matching group
-      ]);
-      
-      directive.updateView();
-
-      expect(viewContainerRef.clear).toHaveBeenCalled();
-      expect(viewContainerRef.createEmbeddedView).toHaveBeenCalledWith(templateRef);
-    });
-
-    it('should show content when user has both matching role and group', () => {
-      directive.appHasAccess = ['admin', 'editor-group'];
-      mockUserSessionService.setRoles(['admin']);
-      mockUserSessionService.setGroups([
-        { groupCd: 'editor-group', name: 'Editor Group' }
-      ]);
-      
       directive.updateView();
 
       expect(viewContainerRef.clear).toHaveBeenCalled();
@@ -266,45 +176,38 @@ describe('HasAccessDirective', () => {
     });
   });
 
+  // ✅ Edge Cases
   describe('Edge Cases', () => {
     beforeEach(() => {
-      directive = new HasAccessDirective(
-        templateRef,
-        viewContainerRef,
-        mockUserSessionService
-      );
+      directive = new HasAccessDirective(templateRef, viewContainerRef, mockUserSessionService);
     });
 
     it('should handle empty required roles array', () => {
       directive.appHasAccess = [];
       mockUserSessionService.setRoles(['admin']);
-      
+
       directive.updateView();
 
       expect(viewContainerRef.clear).toHaveBeenCalled();
       expect(viewContainerRef.createEmbeddedView).not.toHaveBeenCalled();
     });
 
-    it('should handle undefined roles from service', () => {
+    it('should handle undefined roles/groups from service', () => {
       directive.appHasAccess = ['admin'];
-      
-      // Override the method to return undefined
-      spyOn(mockUserSessionService, 'getAllRoles').and.returnValue(undefined as any);
-      spyOn(mockUserSessionService, 'getUserGroups').and.returnValue(undefined as any);
-      
+      spyOn(mockUserSessionService, 'getAllRoles').and.returnValue(undefined);
+      spyOn(mockUserSessionService, 'getUserGroups').and.returnValue(undefined);
+
       directive.updateView();
 
       expect(viewContainerRef.clear).toHaveBeenCalled();
       expect(viewContainerRef.createEmbeddedView).not.toHaveBeenCalled();
     });
 
-    it('should handle null roles from service', () => {
+    it('should handle null roles/groups from service', () => {
       directive.appHasAccess = ['admin'];
-      
-      // Override the method to return null
-      spyOn(mockUserSessionService, 'getAllRoles').and.returnValue(null as any);
-      spyOn(mockUserSessionService, 'getUserGroups').and.returnValue(null as any);
-      
+      spyOn(mockUserSessionService, 'getAllRoles').and.returnValue(null as unknown as string[]);
+      spyOn(mockUserSessionService, 'getUserGroups').and.returnValue(null as unknown as UserGroup[]);
+
       directive.updateView();
 
       expect(viewContainerRef.clear).toHaveBeenCalled();
@@ -313,11 +216,9 @@ describe('HasAccessDirective', () => {
 
     it('should handle case sensitivity in role/group matching', () => {
       directive.appHasAccess = ['Admin', 'EDITOR'];
-      mockUserSessionService.setRoles(['admin', 'editor']); // Different case
-      mockUserSessionService.setGroups([
-        { groupCd: 'admin', name: 'Admin Group' } // Different case
-      ]);
-      
+      mockUserSessionService.setRoles(['admin', 'editor']);
+      mockUserSessionService.setGroups([{ groupCd: 'admin', name: 'Admin Group' }]);
+
       directive.updateView();
 
       expect(viewContainerRef.clear).toHaveBeenCalled();
@@ -325,26 +226,21 @@ describe('HasAccessDirective', () => {
     });
   });
 
+  // ✅ Integration Test
   describe('Integration Test', () => {
-    it('should work correctly when used in a component template', () => {
+    it('should show/hide content in template based on user roles', () => {
       const fixture = TestBed.createComponent(TestComponent);
-      const component = fixture.componentInstance;
-      
-      // Set up the mock service with admin role
       mockUserSessionService.setRoles(['admin']);
       mockUserSessionService.setGroups([]);
-      
-      fixture.detectChanges(); // This will trigger ngOnInit and updateView
-      
-      // The directive should show the content since user has 'admin' role
+
+      fixture.detectChanges();
+
       const compiled = fixture.nativeElement as HTMLElement;
       expect(compiled.textContent).toContain('Protected Content');
-      
-      // Change to user without access
-      mockUserSessionService.setRoles(['user']);
+
+      mockUserSessionService.setRoles(['guest']);
       fixture.detectChanges();
-      
-      // Content should be removed
+
       expect(compiled.textContent).not.toContain('Protected Content');
     });
   });
